@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Checker</title>
+    <title>AI Checker & Mad Libs</title>
     <style>
         :root {
             --primary: #2563eb;
@@ -15,18 +15,57 @@
             --card-bg: #ffffff;
             --text: #0f172a;
             --text-muted: #64748b;
+            --border: #e2e8f0;
         }
 
         body {
             width: 350px;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             margin: 0;
-            padding: 16px;
+            padding: 0; 
             background-color: var(--bg);
             color: var(--text);
         }
 
-        h1 {
+        /* Tabs */
+        .tabs {
+            display: flex;
+            background: var(--card-bg);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--text-muted);
+            transition: all 0.2s;
+        }
+
+        .tab-btn:hover {
+            background-color: #f1f5f9;
+        }
+
+        .tab-btn.active {
+            color: var(--primary);
+            border-bottom: 2px solid var(--primary);
+        }
+
+        .tab-content {
+            display: none;
+            padding: 16px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .tab-header {
             font-size: 1.25rem;
             margin: 0 0 16px 0;
             color: var(--text);
@@ -35,6 +74,7 @@
             gap: 8px;
         }
 
+        /* API List Styles (Existing) */
         .api-list {
             display: flex;
             flex-direction: column;
@@ -46,7 +86,7 @@
             border-radius: 8px;
             padding: 12px;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--border);
         }
 
         .api-header {
@@ -70,35 +110,12 @@
             color: var(--text-muted);
         }
 
-        .status-badge.readily {
-            background: #dcfce7;
-            color: var(--success);
-        }
-
-        .status-badge.available {
-            background: #dcfce7;
-            color: var(--success);
-        }
-
-        .status-badge.after-download {
-            background: #fef9c3;
-            color: var(--warning);
-        }
-
-        .status-badge.downloadable {
-            background: #fef9c3;
-            color: var(--warning);
-        }
-
-        .status-badge.no {
-            background: #fee2e2;
-            color: var(--error);
-        }
-
-        .status-badge.unavailable {
-            background: #fee2e2;
-            color: var(--error);
-        }
+        .status-badge.readily { background: #dcfce7; color: var(--success); }
+        .status-badge.available { background: #dcfce7; color: var(--success); }
+        .status-badge.after-download { background: #fef9c3; color: var(--warning); }
+        .status-badge.downloadable { background: #fef9c3; color: var(--warning); }
+        .status-badge.no { background: #fee2e2; color: var(--error); }
+        .status-badge.unavailable { background: #fee2e2; color: var(--error); }
 
         .api-details {
             font-size: 0.8rem;
@@ -112,7 +129,58 @@
             gap: 8px;
         }
 
+        button.primary-btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            width: 100%;
+        }
+
+        button.primary-btn:hover {
+            background-color: #1d4ed8;
+        }
+
+        button.primary-btn:disabled {
+            background-color: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        /* Mad Libs Styles */
+        .mad-libs-container {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .input-group label {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .input-group input {
+            padding: 8px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 0.9rem;
+            width: 93%;
+        }
+        
         button.download-btn {
+            /* Copied styles because no extend support */
             background-color: var(--primary);
             color: white;
             border: none;
@@ -124,16 +192,37 @@
             transition: background-color 0.2s;
             width: 100%;
         }
+        button.download-btn:hover { background-color: #1d4ed8; }
+        button.download-btn:disabled { background-color: #94a3b8; cursor: not-allowed; }
 
-        button.download-btn:hover {
-            background-color: #1d4ed8;
+        .hidden {
+            display: none !important;
         }
 
-        button.download-btn:disabled {
-            background-color: #94a3b8;
-            cursor: not-allowed;
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid var(--primary);
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
         }
 
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        #mad-libs-unavailable-msg {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 20px;
+            background: var(--card-bg);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        
         .progress-container {
             margin-top: 8px;
             background-color: #e2e8f0;
@@ -143,18 +232,13 @@
             overflow: hidden;
             display: none;
         }
-
-        .progress-container.active {
-            display: block;
-        }
-
+        .progress-container.active { display: block; }
         .progress-bar {
             height: 100%;
             background-color: var(--primary);
             width: 0%;
             transition: width 0.3s ease;
         }
-
         .error-msg {
             color: var(--error);
             font-size: 0.75rem;
@@ -165,12 +249,51 @@
 </head>
 
 <body>
-    <h1>
-        <span>⚡</span> Chrome AI Checka
-    </h1>
-    <div id="api-list" class="api-list">
-        <!-- JS will populate this -->
+    <div class="tabs">
+        <button id="tab-status" class="tab-btn active" data-tab="status-tab">Status</button>
+        <button id="tab-madlibs" class="tab-btn" data-tab="madlibs-tab">Mad Libs</button>
     </div>
+    
+    <!-- Status Tab -->
+    <div id="status-tab" class="tab-content active">
+        <h1 class="tab-header">
+            <span>⚡</span> Chrome AI Checka
+        </h1>
+        <div id="api-list" class="api-list">
+            <!-- JS will populate this -->
+        </div>
+        </div>
+        
+        <!-- Mad Libs Tab -->
+        <div id="madlibs-tab" class="tab-content">
+            <h1 class="tab-header">
+                <span>🤪</span> Mad Libs
+            </h1>
+        
+            <div id="mad-libs-unavailable-msg" class="hidden">
+                Gemini Nano is not available yet. Please enable it in the Status tab.
+            </div>
+        
+            <div id="mad-libs-content" class="mad-libs-container hidden">
+                <p style="font-size: 0.9rem; color: var(--text-muted); margin: 0;">
+                    Scan the current page to find words to replace!
+                </p>
+        
+                <button id="scan-btn" class="primary-btn">Scan Page</button>
+        
+                <div id="scan-loading" class="hidden" style="text-align: center; padding: 10px;">
+                    <div class="loading-spinner"></div>
+                    <div style="margin-top: 8px; font-size: 0.8rem; color: var(--text-muted);">Finding words...</div>
+                </div>
+        
+                <div id="words-form" class="hidden" style="display: flex; flex-direction: column; gap: 12px;">
+                    <!-- Inputs will be injected here -->
+                </div>
+        
+                <button id="replace-btn" class="primary-btn hidden">Mad Libify!</button>
+            </div>
+    </div>
+
     <script src="popup.js"></script>
 </body>
 

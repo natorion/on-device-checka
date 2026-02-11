@@ -1,6 +1,20 @@
 document.addEventListener('DOMContentLoaded', async () => {
     const apiList = document.getElementById('api-list');
 
+    // Tabs Logic
+    const tabs = document.querySelectorAll('.tab-btn');
+    const contents = document.querySelectorAll('.tab-content');
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            contents.forEach(c => c.classList.remove('active'));
+
+            tab.classList.add('active');
+            document.getElementById(tab.dataset.tab).classList.add('active');
+        });
+    });
+
     const apis = [
         {
             name: 'Language Model (Gemini Nano)',
@@ -29,6 +43,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             key: 'Rewriter'
         }
     ];
+
+    let isGeminiAvailable = false;
 
     function getApiNamespace() {
         if (window.ai) return window.ai;
@@ -76,11 +92,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     try {
                         status = await apiObject.availability();
                     } catch (e) {
-                        // This is expected if the API *requires* args and we didn't provide them or they failed
                         console.warn('Availability check without args failed', e);
-                        // If we already tried args and failed, and now no-args failed, return error or unavailable?
-                        // If the API requires args, and we provided them and it failed, it might be an error.
-                        // But if we didn't provide args and it requires them, it's an error in our config.
                         if (args) return 'error';
                     }
                 }
@@ -107,6 +119,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         const { api: apiObject, path } = getApiObject(apiDef);
         const status = await checkAvailability(apiObject, apiDef.checkArgs);
 
+        // Check for Gemini Nano specifically to enable Mad Libs
+        if (apiDef.key === 'LanguageModel') {
+            if (status === 'readily' || status === 'available') { // 'available' is sometimes returned by polyfills or future versions
+                isGeminiAvailable = true;
+            }
+        }
+
         // Header
         const header = document.createElement('div');
         header.className = 'api-header';
@@ -130,11 +149,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         card.appendChild(details);
 
         // Download Action
-        const isDownloadable = status === 'after-download' || status === 'downloadable' || status === 'readily'; // readily might mean we just want to verify? No, usually not.
-        // Actually, sometimes 'readily' means it is ready, so no download needed.
-        // But 'downloadable' means we can download it.
-        // 'after-download' is the old string? Prompt API says 'after-download'.
-
         if (status === 'after-download' || status === 'downloadable') {
             const actions = document.createElement('div');
             actions.className = 'actions';
@@ -180,6 +194,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     badge.className = 'status-badge readily';
                     badge.textContent = 'readily';
 
+                    // If this was Gemini Nano, enable Mad Libs!
+                    if (apiDef.key === 'LanguageModel') {
+                        isGeminiAvailable = true;
+                        initMadLibs();
+                    }
+
                     setTimeout(() => {
                         if (session && typeof session.destroy === 'function') session.destroy();
                     }, 1000);
@@ -203,11 +223,209 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (!window.ai && !window.translation) {
-        // Maybe just log a warning but still render list so we see "Not found"
         console.warn("window.ai not found");
     }
 
+    // Render the API list
     for (const api of apis) {
         await renderApiItem(api);
     }
+
+    // Initialize Mad Libs Logic
+    initMadLibs();
+
+    function initMadLibs() {
+        const unavailableMsg = document.getElementById('mad-libs-unavailable-msg');
+        const madLibsContent = document.getElementById('mad-libs-content');
+
+        if (isGeminiAvailable) {
+            unavailableMsg.classList.add('hidden');
+            madLibsContent.classList.remove('hidden');
+        } else {
+            unavailableMsg.classList.remove('hidden');
+            madLibsContent.classList.add('hidden');
+        }
+    }
+
+    // Mad Libs Core Logic
+    const scanBtn = document.getElementById('scan-btn');
+    const replaceBtn = document.getElementById('replace-btn');
+    const loadingDiv = document.getElementById('scan-loading');
+    const wordsForm = document.getElementById('words-form');
+
+    let currentWordsMap = null; // Store the identified words
+
+    scanBtn.addEventListener('click', async () => {
+        // Reset state
+        scanBtn.disabled = true;
+        replaceBtn.classList.add('hidden');
+        wordsForm.classList.add('hidden');
+        wordsForm.innerHTML = '';
+        loadingDiv.classList.remove('hidden');
+
+        try {
+            // 1. Get Text from Page
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+            if (!tab || (!tab.url.startsWith('http') && !tab.url.startsWith('file'))) {
+                throw new Error("Cannot run on this page.");
+            }
+
+            const injectionResults = await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: () => document.body.innerText.substring(0, 3000) // First 3000 chars should be enough for context
+            });
+
+            const pageText = injectionResults[0].result;
+
+            // 2. Prompt Gemini Nano
+            const { api: languageModel } = getApiObject({ key: 'LanguageModel', namespace: 'ai' });
+            if (!languageModel) throw new Error("Language Model API not found.");
+
+            const session = await languageModel.create();
+
+            const prompt = `
+            Task: Identify a few nouns, verbs, and adjectives from the text below.
+            Output JSON only with format:
+            {
+              "nouns": ["noun1", "noun2"],
+              "verbs": ["verb1", "verb2"],
+              "adjectives": ["adj1", "adj2"]
+            }
+            Find at most 3 of each category if possible.
+            Text:
+            ${pageText}
+            `;
+
+            const result = await session.prompt(prompt);
+            console.log("Model Output:", result);
+
+            // 3. Parse JSON
+            let jsonStr = result.trim();
+            // Remove markdown if present
+            if (jsonStr.startsWith('```')) {
+                jsonStr = jsonStr.replace(/^```(json)?/, '').replace(/```$/, '');
+            }
+
+            let parsed;
+            try {
+                parsed = JSON.parse(jsonStr);
+            } catch (e) {
+                // simple retry logic or fallback?
+                // Try simpler prompt or regex?
+                console.error("JSON parse failed", e);
+                throw new Error("Failed to parse model output.");
+            }
+
+            currentWordsMap = parsed;
+
+            // 4. Build UI
+            renderWordsForm(parsed);
+
+            loadingDiv.classList.add('hidden');
+            wordsForm.classList.remove('hidden');
+            replaceBtn.classList.remove('hidden');
+            scanBtn.disabled = false;
+
+            session.destroy();
+
+        } catch (err) {
+            console.error(err);
+            loadingDiv.innerHTML = `<div style="color:red">Error: ${err.message}</div>`;
+            setTimeout(() => {
+                loadingDiv.classList.add('hidden');
+                scanBtn.disabled = false;
+                loadingDiv.innerHTML = `<div class="loading-spinner"></div><div style="margin-top: 8px;">Finding words...</div>`; // reset
+            }, 3000);
+        }
+    });
+
+    function renderWordsForm(wordsData) {
+        // wordsData = { nouns: [...], verbs: [...], adjectives: [...] }
+        const categories = ['nouns', 'verbs', 'adjectives'];
+
+        categories.forEach(cat => {
+            const words = wordsData[cat];
+            if (!words || words.length === 0) return;
+
+            words.forEach((originalWord, index) => {
+                const group = document.createElement('div');
+                group.className = 'input-group';
+
+                const label = document.createElement('label');
+                label.textContent = `Replace "${originalWord}" (${cat.slice(0, -1)}):`;
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.placeholder = `Enter a ${cat.slice(0, -1)}...`;
+                input.dataset.original = originalWord;
+                input.dataset.category = cat;
+
+                group.appendChild(label);
+                group.appendChild(input);
+                wordsForm.appendChild(group);
+            });
+        });
+    }
+
+    replaceBtn.addEventListener('click', async () => {
+        // Gather replacements
+        const inputs = wordsForm.querySelectorAll('input');
+        const replacements = {};
+
+        inputs.forEach(input => {
+            if (input.value.trim()) {
+                replacements[input.dataset.original] = input.value.trim();
+            }
+        });
+
+        if (Object.keys(replacements).length === 0) return;
+
+        // Execute replacement script
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+        await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: (replacementsMap) => {
+                // Enable designMode temporarily if needed or just replace text nodes
+                // Using TreeWalker is safer than innerHTML replace
+                const walker = document.createTreeWalker(
+                    document.body,
+                    NodeFilter.SHOW_TEXT,
+                    null,
+                    false
+                );
+
+                let node;
+                while (node = walker.nextNode()) {
+                    let text = node.nodeValue;
+                    let modified = false;
+
+                    for (const [original, replacement] of Object.entries(replacementsMap)) {
+                        // Simple replaceAll for the exact word (case sensitive for simplicity initially)
+                        // Using RegExp with boundary might be better: \bword\b
+                        // But words from model might capture punctuation or be partial.
+                        // Let's try simple global string replace first, but case insensitive?
+                        // If model returns "Time", we replace "Time".
+
+                        // Escape regex special characters to avoid crashes
+                        const escapedOriginal = original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        const regex = new RegExp(escapedOriginal, 'gi');
+                        if (regex.test(text)) {
+                            text = text.replace(regex, replacement);
+                            modified = true;
+                        }
+                    }
+
+                    if (modified) {
+                        node.nodeValue = text;
+                    }
+                }
+            },
+            args: [replacements]
+        });
+
+        window.close(); // Close popup after action? Or show success?
+    });
+
 });
