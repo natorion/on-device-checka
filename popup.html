@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Checker</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --success: #16a34a;
+            --warning: #ca8a04;
+            --error: #dc2626;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text: #0f172a;
+            --text-muted: #64748b;
+        }
+
+        body {
+            width: 350px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 16px;
+            background-color: var(--bg);
+            color: var(--text);
+        }
+
+        h1 {
+            font-size: 1.25rem;
+            margin: 0 0 16px 0;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .api-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .api-card {
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e2e8f0;
+        }
+
+        .api-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .api-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-weight: 500;
+            background: #e2e8f0;
+            color: var(--text-muted);
+        }
+
+        .status-badge.readily {
+            background: #dcfce7;
+            color: var(--success);
+        }
+
+        .status-badge.available {
+            background: #dcfce7;
+            color: var(--success);
+        }
+
+        .status-badge.after-download {
+            background: #fef9c3;
+            color: var(--warning);
+        }
+
+        .status-badge.downloadable {
+            background: #fef9c3;
+            color: var(--warning);
+        }
+
+        .status-badge.no {
+            background: #fee2e2;
+            color: var(--error);
+        }
+
+        .status-badge.unavailable {
+            background: #fee2e2;
+            color: var(--error);
+        }
+
+        .api-details {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .actions {
+            margin-top: 8px;
+            display: flex;
+            gap: 8px;
+        }
+
+        button.download-btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            width: 100%;
+        }
+
+        button.download-btn:hover {
+            background-color: #1d4ed8;
+        }
+
+        button.download-btn:disabled {
+            background-color: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .progress-container {
+            margin-top: 8px;
+            background-color: #e2e8f0;
+            border-radius: 4px;
+            height: 6px;
+            width: 100%;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-container.active {
+            display: block;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background-color: var(--primary);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .error-msg {
+            color: var(--error);
+            font-size: 0.75rem;
+            margin-top: 4px;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>
+        <span>⚡</span> Chrome AI Checka
+    </h1>
+    <div id="api-list" class="api-list">
+        <!-- JS will populate this -->
+    </div>
+    <script src="popup.js"></script>
+</body>
+
+</html>
