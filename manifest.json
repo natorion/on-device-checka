@@ -5,5 +5,9 @@
   "description": "Checks availability of Chrome's on-device AI APIs.",
   "action": {
     "default_popup": "popup.html"
-  }
+  },
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ]
 }
