@@ -4,7 +4,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const apis = [
         {
             name: 'Language Model (Gemini Nano)',
-            key: 'LanguageModel',
+            key: 'languageModel',
+            namespace: 'ai',
             docs: 'https://developer.chrome.com/docs/ai/prompt-api'
         },
         {
@@ -45,7 +46,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Base case: text is small enough
         if (text.length <= CHUNK_SIZE) {
-            const summarizer = await apiObject.create({ type: 'key-points', format: 'markdown', length: 'medium' });
+            const summarizer = await apiObject.create({ type: 'key-points', format: 'markdown', length: 'medium', outputLanguage: 'en' });
             const result = await summarizer.summarize(text);
             summarizer.destroy();
             return result;
@@ -73,7 +74,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Use a shared summarizer for chunks potentially? 
         // Docs say: "Once set, the parameters can't be changed. Create a new summarizer object if you need to make modifications"
         // We can reuse the same summarizer object for multiple summarize calls if config is same.
-        const summarizer = await apiObject.create({ type: 'key-points', format: 'markdown', length: 'medium' });
+        const summarizer = await apiObject.create({ type: 'key-points', format: 'markdown', length: 'medium', outputLanguage: 'en' });
 
         try {
             for (const chunk of chunks) {
@@ -87,6 +88,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Combine and recurse
         const combined = chunkSummaries.join('\n\n');
         return runSummarization(combined, apiObject);
+    }
+
+    async function suggestUseCases(text, apiObject) {
+        // Truncate to avoid token limits (naive truncation)
+        const MAX_CONTEXT = 2500;
+        const truncatedText = text.slice(0, MAX_CONTEXT);
+
+        const systemPrompt = "You are a helpful AI assistant that analyzes web page content to suggest on-device AI use cases.";
+        const userPrompt = `Analyze the following content and list 3-5 potential on-device AI use cases (summarization, translation, rewriting, classification, etc.) that are relevant for this page. The response should be a simple bulleted list.\n\nContent:\n${truncatedText}`;
+
+        try {
+            const session = await apiObject.create({
+                initialPrompts: [
+                    { role: 'system', content: systemPrompt }
+                ]
+            });
+
+            const result = await session.prompt(userPrompt);
+            session.destroy();
+            return result;
+        } catch (e) {
+            console.error("Prompt API failed", e);
+            throw e;
+        }
     }
 
     function getApiNamespace() {
@@ -312,16 +337,60 @@ document.addEventListener('DOMContentLoaded', async () => {
             // CSS for .actions says: display: flex; gap: 8px;
             // We probably want the button and then the summary below it.
             // Let's adjust styles dynamically or in CSS.
-            actions.style.flexDirection = 'column'; 
+            actions.style.flexDirection = 'column';
+        } else if (apiDef.key === 'languageModel' && (status === 'available' || status === 'readily')) {
+            const actions = document.createElement('div');
+            actions.className = 'actions';
+
+            const btn = document.createElement('button');
+            btn.className = 'download-btn'; // Re-use style
+            btn.textContent = 'Suggest Use Cases';
+
+            const suggestionOutput = document.createElement('div');
+            suggestionOutput.className = 'suggestion-output';
+            suggestionOutput.style.marginTop = '10px';
+            suggestionOutput.style.fontSize = '0.9rem';
+            suggestionOutput.style.whiteSpace = 'pre-wrap';
+            suggestionOutput.style.padding = '8px';
+            suggestionOutput.style.background = '#f1f5f9';
+            suggestionOutput.style.borderRadius = '4px';
+            suggestionOutput.style.display = 'none';
+
+            btn.onclick = async () => {
+                btn.disabled = true;
+                btn.textContent = 'Thinking...';
+                suggestionOutput.style.display = 'none';
+                suggestionOutput.textContent = '';
+
+                try {
+                    const text = await getTabContent();
+                    if (!text) throw new Error("No text found on page");
+
+                    const suggestions = await suggestUseCases(text, apiObject);
+
+                    suggestionOutput.textContent = suggestions;
+                    suggestionOutput.style.display = 'block';
+                    btn.textContent = 'Suggest Use Cases';
+                    btn.disabled = false;
+                } catch (err) {
+                    console.error("Suggestion failed", err);
+                    suggestionOutput.textContent = "Error: " + err.message;
+                    suggestionOutput.style.display = 'block';
+                    btn.textContent = 'Retry';
+                    btn.disabled = false;
+                }
+            };
+
+            actions.appendChild(btn);
+            actions.appendChild(suggestionOutput);
+            card.appendChild(actions);
+            actions.style.flexDirection = 'column';
         }
 
         apiList.appendChild(card);
     }
 
-    if (!window.ai && !window.translation) {
-        // Maybe just log a warning but still render list so we see "Not found"
-        console.warn("window.ai not found");
-    }
+    // window.ai check removed as it is deprecated and might give false positives/negatives for specific new APIs
 
     for (const api of apis) {
         await renderApiItem(api);
