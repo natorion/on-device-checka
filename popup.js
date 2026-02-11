@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         {
             name: 'Language Model (Gemini Nano)',
             key: 'languageModel',
-            namespace: 'ai',
+            namespace: 'globalThis', // Updated to use globalThis
             docs: 'https://developer.chrome.com/docs/ai/prompt-api'
         },
         {
@@ -121,6 +121,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function getApiObject(apiDef) {
+        // Special case for LanguageModel which is now on globalThis
+        if (apiDef.key === 'languageModel') {
+            if (globalThis.LanguageModel) {
+                return { api: globalThis.LanguageModel, path: 'globalThis.LanguageModel' };
+            }
+            // Fallback for older implementation or different naming if necessary,
+            // but user explicitly said window.ai.languageModel is deprecated/wrong.
+            // We can check if window.ai.languageModel still exists just in case, but prioritize globalThis.
+            if (window.ai && window.ai.languageModel) {
+                return { api: window.ai.languageModel, path: 'window.ai.languageModel (Deprecated)' };
+            }
+            return { api: null, path: '' };
+        }
+
         // If namespace is explicit 'ai', try that first
         if (apiDef.namespace === 'ai') {
             if (window.ai && window.ai[apiDef.key]) {
@@ -309,6 +323,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 summaryOutput.style.display = 'none';
                 summaryOutput.textContent = '';
 
+                // Remove any existing use case buttons/outputs if re-summarizing
+                const existingUseCaseBtn = actions.querySelector('.use-case-btn');
+                if (existingUseCaseBtn) existingUseCaseBtn.remove();
+                const existingUseCaseOutput = actions.querySelector('.use-case-output');
+                if (existingUseCaseOutput) existingUseCaseOutput.remove();
+
                 try {
                     const text = await getTabContent();
                     if (!text) throw new Error("No text found on page");
@@ -319,6 +339,76 @@ document.addEventListener('DOMContentLoaded', async () => {
                     summaryOutput.style.display = 'block';
                     btn.textContent = 'Summarize Page';
                     btn.disabled = false;
+
+                    // Add "Create Use Cases" button if Language Model is available
+                    if (globalThis.LanguageModel || (window.ai && window.ai.languageModel)) {
+                        const useCaseBtn = document.createElement('button');
+                        useCaseBtn.className = 'download-btn use-case-btn';
+                        useCaseBtn.textContent = 'Create Use Cases';
+                        useCaseBtn.style.marginTop = '8px';
+                        useCaseBtn.style.backgroundColor = '#8b5cf6'; // Violet color to distinguish
+
+                        // Hover effect for violet button
+                        useCaseBtn.onmouseover = () => useCaseBtn.style.backgroundColor = '#7c3aed';
+                        useCaseBtn.onmouseout = () => useCaseBtn.style.backgroundColor = '#8b5cf6';
+
+                        const useCaseOutput = document.createElement('div');
+                        useCaseOutput.className = 'use-case-output';
+                        useCaseOutput.style.marginTop = '10px';
+                        useCaseOutput.style.fontSize = '0.9rem';
+                        useCaseOutput.style.whiteSpace = 'pre-wrap';
+                        useCaseOutput.style.padding = '8px';
+                        useCaseOutput.style.background = '#f1f5f9';
+                        useCaseOutput.style.borderRadius = '4px';
+                        useCaseOutput.style.display = 'none';
+
+                        useCaseBtn.onclick = async () => {
+                            useCaseBtn.disabled = true;
+                            useCaseBtn.textContent = 'Ideating...';
+                            useCaseOutput.style.display = 'none';
+                            useCaseOutput.textContent = '';
+
+                            try {
+                                const systemPrompt = "You are a Product Manager for the page being analyzed. You want to optimize revenue. Analyze the following summary of a webpage and ideate 3-5 innovative use cases for the Prompt API (on-device AI) that could be implemented for this specific page.";
+                                const userPrompt = `Summary:\n${summary}`;
+
+                                const capabilities = await (globalThis.LanguageModel || window.ai.languageModel).capabilities();
+                                let session;
+                                if (capabilities && capabilities.available !== 'no') { // Check availability first
+                                    session = await (globalThis.LanguageModel || window.ai.languageModel).create({
+                                        systemPrompt: systemPrompt // Note: check supportsSystemPrompt if strictly needed, but Prompt API often takes it in config or initial prompts
+                                    });
+                                } else {
+                                    throw new Error("Language Model not available");
+                                }
+
+                                // Provide system prompt as initial prompt if supported or just separate
+                                // Actually, `create({ systemPrompt: ... })` is the modern way if supported, 
+                                // or `initialPrompts` if older. Let's try `systemPrompt` param first or fallback.
+                                // For simplicity/robustness with current API:
+                                // "systemPrompt" is a valid option in `create()`.
+
+                                const result = await session.prompt(userPrompt);
+
+                                useCaseOutput.textContent = result;
+                                useCaseOutput.style.display = 'block';
+                                useCaseBtn.textContent = 'Create Use Cases';
+                                useCaseBtn.disabled = false;
+                                session.destroy();
+
+                            } catch (err) {
+                                console.error("Use case generation failed", err);
+                                useCaseOutput.textContent = "Error: " + err.message;
+                                useCaseOutput.style.display = 'block';
+                                useCaseBtn.textContent = 'Retry Use Cases';
+                                useCaseBtn.disabled = false;
+                            }
+                        };
+
+                        actions.appendChild(useCaseBtn);
+                        actions.appendChild(useCaseOutput);
+                    }
+
                 } catch (err) {
                     console.error("Summarization failed", err);
                     summaryOutput.textContent = "Error: " + err.message;
